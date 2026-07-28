@@ -237,14 +237,14 @@ export default function Home() {
           </Section>
 
           <Section
-            title="Relatório Reprovado — motivo"
-            subtitle="Cards que travaram antes de virar prospecção ativa, com o motivo classificado a partir das notas do card."
+            title="Erros — Relatório Reprovado, o motivo"
+            subtitle="Cards que travaram antes de virar prospecção ativa (exclui clientes, que têm seção própria abaixo), com o motivo classificado a partir das notas do card."
           >
             <div className="grid gap-3 sm:grid-cols-2">
-              {data.reprovados.length === 0 && (
-                <p className="text-slate-500">Nenhum relatório reprovado em aberto.</p>
+              {data.erros.length === 0 && (
+                <p className="text-slate-500">Nenhum erro em aberto.</p>
               )}
-              {data.reprovados.map((r) => (
+              {data.erros.map((r) => (
                 <div key={r.id} className="rounded-xl border border-amber-900/60 bg-amber-950/20 p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div>
