@@ -113,6 +113,7 @@ export default function Home() {
   const [data, setData] = useState<EventosData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [motivoAtivo, setMotivoAtivo] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -245,30 +246,67 @@ export default function Home() {
             title="Erros — Relatório Reprovado, o motivo"
             subtitle="Cards que travaram antes de virar prospecção ativa (exclui clientes, que têm seção própria abaixo), com o motivo classificado a partir das notas do card."
           >
-            <div className="grid gap-3 sm:grid-cols-2">
-              {data.erros.length === 0 && (
-                <p className="text-slate-500">Nenhum erro em aberto.</p>
-              )}
-              {data.erros.map((r) => (
-                <div key={r.id} className="rounded-xl border border-amber-900/60 bg-amber-950/20 p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="font-medium text-slate-100">{r.organizacao || r.titulo}</div>
-                      <div className="mt-1 text-xs font-semibold uppercase text-amber-400">{r.motivo}</div>
-                      <p className="mt-1 text-sm text-slate-400">{r.detalhe}</p>
-                    </div>
-                    <a
-                      href={r.link}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="shrink-0 text-cyan-400 hover:underline"
+            {(() => {
+              const contagem = new Map<string, number>();
+              for (const r of data.erros) {
+                contagem.set(r.motivo, (contagem.get(r.motivo) || 0) + 1);
+              }
+              const motivos = Array.from(contagem.keys()).sort((a, b) => (contagem.get(b) || 0) - (contagem.get(a) || 0));
+              const filtrados = motivoAtivo ? data.erros.filter((r) => r.motivo === motivoAtivo) : data.erros;
+              return (
+                <>
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setMotivoAtivo(null)}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                        motivoAtivo === null
+                          ? "border-cyan-500 bg-cyan-500/10 text-cyan-300"
+                          : "border-slate-700 text-slate-400 hover:bg-slate-800"
+                      }`}
                     >
-                      Ver card →
-                    </a>
+                      Todos ({data.erros.length})
+                    </button>
+                    {motivos.map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setMotivoAtivo(m)}
+                        className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                          motivoAtivo === m
+                            ? "border-cyan-500 bg-cyan-500/10 text-cyan-300"
+                            : "border-slate-700 text-slate-400 hover:bg-slate-800"
+                        }`}
+                      >
+                        {m} ({contagem.get(m)})
+                      </button>
+                    ))}
                   </div>
-                </div>
-              ))}
-            </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {filtrados.length === 0 && (
+                      <p className="text-slate-500">Nenhum erro nessa categoria.</p>
+                    )}
+                    {filtrados.map((r) => (
+                      <div key={r.id} className="rounded-xl border border-amber-900/60 bg-amber-950/20 p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-medium text-slate-100">{r.organizacao || r.titulo}</div>
+                            <div className="mt-1 text-xs font-semibold uppercase text-amber-400">{r.motivo}</div>
+                            <p className="mt-1 text-sm text-slate-400">{r.detalhe}</p>
+                          </div>
+                          <a
+                            href={r.link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="shrink-0 text-cyan-400 hover:underline"
+                          >
+                            Ver card →
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
           </Section>
 
           <Section
