@@ -6,6 +6,7 @@ import { Kpi, Secao, fmtData, fmtDuracao } from "@/components/ui";
 import { Alertas, AoVivo, Funil, MovimentoPorHora, Novos } from "@/components/fluxo";
 import { Clientes, EmailsFalhados, Erros, Placar, Relatorios, Reprovados } from "@/components/erros";
 import { Participantes, Sorteio } from "@/components/equipe";
+import { FilaPreCadastro } from "@/components/fila";
 
 const PERIODOS = [
   { dias: 1, rotulo: "Hoje" },
@@ -149,6 +150,19 @@ export default function Home() {
         <div className="mt-6 rounded-xl border border-rose-900 bg-rose-950/40 p-4 text-rose-300">
           Erro ao carregar: {erro}
         </div>
+      )}
+
+      {/* Fora do bloco gateado por `data` de propósito: a fila enche justamente
+          quando o Pipedrive está fora do ar — que é quando o /api/eventos
+          falha e o resto do painel não carrega. Ela busca de fonte própria
+          (Supabase via edge function) e precisa aparecer mesmo no pior dia. */}
+      {aba === "funil" && (
+        <Secao
+          titulo="Fila de recuperação do pré-cadastro"
+          subtitulo="Leads da landing que falharam ao virar card (ex.: limite diário do Pipedrive) ficam salvos aqui e entram sozinhos quando a API libera. Nenhum lead se perde."
+        >
+          <FilaPreCadastro />
+        </Secao>
       )}
 
       {data && aba === "funil" && (
