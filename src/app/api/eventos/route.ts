@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   fetchEventoDeals,
   fetchDealNotes,
+  fetchDealNotesComData,
   fetchStageNames,
   pipedriveCardUrl,
   ETAPAS_DE_PARADA,
@@ -33,6 +34,7 @@ import {
 import {
   classificarPorNotas,
   corteDoPeriodo,
+  detectarFalhaEmail,
   estaTravado,
   minutosDesde,
   motivoDoCard,
@@ -44,6 +46,7 @@ import type {
   CardAoVivo,
   CardResumo,
   Contagem,
+  EmailFalhaItem,
   ErroItem,
   EtapaFunil,
   EventosData,
@@ -72,6 +75,15 @@ const ETAPAS_FINAIS_OK = [
 const MAX_NOTAS_COM_LOG = 15;
 const MAX_NOTAS_SEM_LOG = 60;
 const NOTAS_POR_LOTE = 8;
+
+/**
+ * Incidente 29/07/2026 (Gmail SMTP, GMAIL_SDR1_APP_PASSWORD expirada): card
+ * pode ter completado o funil certinho e mesmo assim o e-mail final não ter
+ * saído — não dá pra saber isso pelo log/lost_reason, só lendo as notas. Custa
+ * 1 request por card checado; capado pros mais recentes do período pra não
+ * estourar o rate limit do Pipedrive em dia de pico.
+ */
+const MAX_EMAIL_FALHA_CHECADOS = 150;
 
 function nomeOrg(d: EventoDeal): string {
   return d.orgName || d.title || `#${d.id}`;
@@ -314,6 +326,36 @@ export async function GET(request: Request) {
       .sort((a, b) => (a.addTime < b.addTime ? 1 : -1))
       .map(resumo);
 
+    // ── E-mails não enviados (falha de SMTP/credencial) ────────────────
+    // Ortogonal ao `motivo` do card — roda sobre TODAS as notas, não só a mais
+    // recente, porque o card pode ter completado o funil (relatório gerado)
+    // e mesmo assim o e-mail final não ter saído.
+    const elegiveisEmail = deals
+      .slice()
+      .sort((a, b) => (a.addTime < b.addTime ? 1 : -1))
+      .slice(0, MAX_EMAIL_FALHA_CHECADOS);
+    const emailsFalhadosItens: EmailFalhaItem[] = [];
+    for (let i = 0; i < elegiveisEmail.length; i += NOTAS_POR_LOTE) {
+      await Promise.all(
+        elegiveisEmail.slice(i, i + NOTAS_POR_LOTE).map(async (d) => {
+          const falha = detectarFalhaEmail(await fetchDealNotesComData(d.id));
+          if (falha) {
+            emailsFalhadosItens.push({
+              id: d.id,
+              org: nomeOrg(d),
+              emailLead: d.personEmail,
+              estagio: nomeEtapa(d.stageId),
+              status: d.status,
+              mensagem: falha.mensagem,
+              ocorreuEm: falha.ocorreuEm,
+              link: pipedriveCardUrl(d.id),
+            });
+          }
+        })
+      );
+    }
+    emailsFalhadosItens.sort((a, b) => (a.ocorreuEm < b.ocorreuEm ? 1 : -1));
+
     // ── Erros técnicos ─────────────────────────────────────────────────
     const orgPorDeal = new Map(deals.map((d) => [d.id, nomeOrg(d)]));
     const paraErro = (e: AutomationError): ErroItem => ({
@@ -495,6 +537,7 @@ export async function GET(request: Request) {
       errosAbertos: errosAbertos.length,
       errosResolvidos24h,
       medianaMinutosAteRelatorio: mediana(tempoAteRelatorio),
+      emailsFalhados: emailsFalhadosItens.length,
     };
 
     // ── Alertas (o que precisa de atenção) ─────────────────────────────
@@ -508,6 +551,18 @@ export async function GET(request: Request) {
         texto:
           `Cards abertos em Novo Lead ou Monitoria além do SLA (${SLA_MONITORIA_MIN}min em Monitoria). ` +
           "O sweep da Lia re-dispara sozinho — se o número não cair, a fila do SerpMonitor está represada.",
+      });
+    }
+
+    if (kpis.emailsFalhados > 0) {
+      alertas.push({
+        nivel: "critico",
+        titulo: "E-mails do evento não enviados (Gmail SMTP)",
+        valor: String(kpis.emailsFalhados),
+        texto:
+          `${kpis.emailsFalhados} card(s) com falha ao enviar e-mail (relatório ou Envio 1) — ` +
+          `credencial GMAIL_SDR1_APP_PASSWORD do branddi-report-engine (Vercel). O card segue o funil ` +
+          "normalmente, só o e-mail pro lead que não sai. Ver aba \"E-mails não enviados\".",
       });
     }
 
@@ -616,6 +671,11 @@ export async function GET(request: Request) {
       reprovadosPorMotivo,
       clientes,
       relatorios,
+      emailsFalhados: {
+        itens: emailsFalhadosItens,
+        checados: elegiveisEmail.length,
+        elegiveis: deals.length,
+      },
       erros: {
         abertos: errosAbertos,
         resolvidos: errosResolvidos.slice(0, 80),

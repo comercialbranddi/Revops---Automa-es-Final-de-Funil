@@ -79,6 +79,8 @@ export interface EventoDeal {
   orgName: string | null;
   orgId: number | null;
   personName: string | null;
+  /** Só vem preenchido pela v1 (embutido no /pipelines/25/deals) — v2 fica null. */
+  personEmail: string | null;
   stageId: number;
   status: "open" | "won" | "lost";
   addTime: string; // ISO com Z
@@ -162,6 +164,14 @@ type V1Deal = Record<string, unknown> & {
   lost_reason: unknown;
 };
 
+function emailFromPersonId(raw: unknown): string | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const email = (raw as { email?: unknown }).email;
+  if (!Array.isArray(email) || !email.length) return null;
+  const primeiro = email.find((e) => e && (e as { primary?: boolean }).primary) ?? email[0];
+  return (primeiro as { value?: string })?.value || null;
+}
+
 function normalizeV1(d: V1Deal): EventoDeal {
   const orgId = typeof d.org_id === "object" && d.org_id !== null
     ? num((d.org_id as { value?: unknown }).value)
@@ -172,6 +182,7 @@ function normalizeV1(d: V1Deal): EventoDeal {
     orgName: d.org_name || null,
     orgId,
     personName: d.person_name || null,
+    personEmail: emailFromPersonId(d.person_id),
     stageId: d.stage_id,
     status: d.status,
     addTime: toIso(d.add_time)!,
@@ -212,6 +223,7 @@ function normalizeV2(d: V2Deal): EventoDeal {
     orgName: null,
     orgId: d.org_id ?? null,
     personName: null,
+    personEmail: null,
     stageId: d.stage_id,
     status: d.status,
     addTime: toIso(d.add_time)!,
@@ -322,6 +334,27 @@ export async function fetchDealNotes(dealId: number): Promise<string[]> {
       `${PIPEDRIVE_V1}/notes?deal_id=${dealId}&limit=20&api_token=${token()}`
     );
     return (json.data || []).map((n: { content: string }) => n.content);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Mesma fonte de `fetchDealNotes`, mas com `add_time` — usado só pela detecção
+ * de falha de envio de e-mail (precisa saber QUANDO a falha aconteceu, não só
+ * se aconteceu).
+ */
+export async function fetchDealNotesComData(
+  dealId: number
+): Promise<{ content: string; addTime: string }[]> {
+  try {
+    const json = await getJson(
+      `${PIPEDRIVE_V1}/notes?deal_id=${dealId}&limit=50&api_token=${token()}`
+    );
+    return (json.data || []).map((n: { content: string; add_time: string }) => ({
+      content: n.content,
+      addTime: toIso(n.add_time) || n.add_time,
+    }));
   } catch {
     return [];
   }

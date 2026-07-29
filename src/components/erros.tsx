@@ -284,6 +284,62 @@ export function Relatorios({ cards }: { cards: CardResumo[] }) {
   );
 }
 
+/**
+ * Incidente 29/07/2026 — falha de envio (GMAIL_SDR1_APP_PASSWORD expirada no
+ * Vercel do branddi-report-engine). Ortogonal à seção "Reprovados": um card
+ * pode ter completado o funil certinho (Prospecção Ativa, relatório gerado)
+ * e mesmo assim nunca ter avisado o lead por e-mail.
+ */
+export function EmailsFalhados({
+  dados,
+}: {
+  dados: EventosData["emailsFalhados"];
+}) {
+  const { itens, checados, elegiveis } = dados;
+
+  if (!itens.length) {
+    return (
+      <Vazio>
+        Nenhuma falha de envio encontrada nos {checados.toLocaleString("pt-BR")} card(s) mais recentes
+        do período checados nas notas.
+      </Vazio>
+    );
+  }
+
+  return (
+    <>
+      {elegiveis > checados && (
+        <p className="mb-3 text-xs text-amber-400">
+          ⚠️ Lista limitada aos {checados.toLocaleString("pt-BR")} cards mais recentes do período —
+          existem {(elegiveis - checados).toLocaleString("pt-BR")} card(s) mais antigo(s) ainda não
+          checado(s). Se precisar do histórico completo, reduza o período ou peça pra ampliar o teto.
+        </p>
+      )}
+      <Tabela cabecalho={["Organização", "E-mail do lead", "Etapa atual", "Quando falhou", "Erro", ""]}>
+        {itens.map((e) => (
+          <tr key={e.id} className="bg-slate-950/30">
+            <td className="px-4 py-2.5">
+              <div className="font-medium text-slate-200">{e.org}</div>
+              <Etiqueta tom={e.status === "lost" ? "neutro" : e.status === "won" ? "ok" : "info"}>
+                {e.status === "open" ? "Aberto" : e.status === "won" ? "Ganho" : "Perdido"}
+              </Etiqueta>
+            </td>
+            <td className="whitespace-nowrap px-4 py-2.5 text-slate-300">{e.emailLead || "—"}</td>
+            <td className="whitespace-nowrap px-4 py-2.5 text-slate-400">{e.estagio}</td>
+            <td className="whitespace-nowrap px-4 py-2.5 text-slate-400">{fmtData(e.ocorreuEm)}</td>
+            <td className="max-w-md px-4 py-2.5 text-rose-300">{e.mensagem}</td>
+            <td className="whitespace-nowrap px-4 py-2.5">
+              <a href={e.link} target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">
+                Ver →
+              </a>
+            </td>
+          </tr>
+        ))}
+      </Tabela>
+    </>
+  );
+}
+
 export function Placar({ placar }: { placar: EventosData["placar"] }) {
   if (!placar.disponivel || !placar.ranking.length) {
     return (
