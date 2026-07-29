@@ -88,6 +88,21 @@ export interface EventoDeal {
   relatorioHtml: string | null;
   emailValidado: string | null;
   observacao: string | null;
+  /** Quem do time captou o lead. Pode ser mais de um no mesmo card. */
+  colaboradores: string[];
+}
+
+/**
+ * O campo "Observação/Status" é onde as Edge Functions de captação gravam quem
+ * trouxe o lead (`mergeOwners`). Quando duas pessoas trabalham o mesmo card o
+ * valor vira "Ana Vitória, Alicia" — as duas levam o crédito.
+ */
+export function parseColaboradores(raw: unknown): string[] {
+  if (typeof raw !== "string") return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 export function pipedriveCardUrl(dealId: number): string {
@@ -166,6 +181,7 @@ function normalizeV1(d: V1Deal): EventoDeal {
     relatorioHtml: (d[FIELD.RELATORIO_HTML] as string) || null,
     emailValidado: EMAIL_VALIDADO_OPTIONS[num(d[FIELD.EMAIL_VALIDADO]) ?? -1] || null,
     observacao: (d[FIELD.OBSERVACAO] as string) || null,
+    colaboradores: parseColaboradores(d[FIELD.OBSERVACAO]),
   };
 }
 
@@ -205,6 +221,7 @@ function normalizeV2(d: V2Deal): EventoDeal {
     relatorioHtml: (cf[FIELD.RELATORIO_HTML] as string) || null,
     emailValidado: EMAIL_VALIDADO_OPTIONS[num(cf[FIELD.EMAIL_VALIDADO]) ?? -1] || null,
     observacao: (cf[FIELD.OBSERVACAO] as string) || null,
+    colaboradores: parseColaboradores(cf[FIELD.OBSERVACAO]),
   };
 }
 

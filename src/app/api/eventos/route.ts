@@ -39,6 +39,7 @@ import type {
   ErroItem,
   EtapaFunil,
   EventosData,
+  Participante,
   SerieHora,
 } from "@/lib/tipos";
 
@@ -354,6 +355,59 @@ export async function GET(request: Request) {
 
     const sorteioFiltrado = sorteioRows.filter((s) => !s.deal_id || dealsDoPeriodo.has(s.deal_id));
 
+    // ── Participantes (quem do time trouxe cada lead) ──────────────────
+    const pontosPorPessoa = new Map<string, number>();
+    for (const p of placarFiltrado) {
+      pontosPorPessoa.set(p.person, (pontosPorPessoa.get(p.person) ?? 0) + p.points);
+    }
+
+    const equipeMapa = new Map<string, Participante>();
+    for (const d of deals) {
+      for (const pessoa of d.colaboradores) {
+        const linha =
+          equipeMapa.get(pessoa) ||
+          {
+            pessoa,
+            estande: 0,
+            qrEstande: 0,
+            preCadastro: 0,
+            semOrigem: 0,
+            total: 0,
+            reunioesAgendadas: 0,
+            reunioesRealizadas: 0,
+            relatorios: 0,
+            emailPessoal: 0,
+            pontos: null,
+          };
+        linha.total += 1;
+        if (d.origem === "Estande") linha.estande += 1;
+        else if (d.origem === "QR Estande") linha.qrEstande += 1;
+        else if (d.origem === "Pré-cadastro LinkedIn") linha.preCadastro += 1;
+        else linha.semOrigem += 1;
+        if (d.stageId === STAGES.REUNIAO_AGENDADA) linha.reunioesAgendadas += 1;
+        if (d.stageId === STAGES.REUNIAO_REALIZADA) linha.reunioesRealizadas += 1;
+        if (d.relatorioHtml || dispatchPorDeal.has(d.id)) linha.relatorios += 1;
+        if (motivos.get(d.id)?.chave === "contato_invalido") linha.emailPessoal += 1;
+        equipeMapa.set(pessoa, linha);
+      }
+    }
+    const equipe = [...equipeMapa.values()]
+      .map((l) => ({ ...l, pontos: pontosPorPessoa.get(l.pessoa) ?? null }))
+      .sort((a, b) => b.total - a.total);
+
+    // Sem Supabase o total do sorteio é aproximado pelos cards de pré-cadastro:
+    // é o único canal que grava entrada hoje, mas a entrada é por PESSOA e o
+    // card é por organização, então os números não batem exatamente.
+    const sorteioDisponivel = temSupabase && !supabaseErro;
+    const preCadastroCards = deals.filter((d) => d.origem === "Pré-cadastro LinkedIn");
+    const entradasSorteio = sorteioFiltrado.map((s) => ({
+      nome: s.person_name,
+      email: s.email,
+      fonte: s.source,
+      criadoEm: s.created_at,
+      link: s.deal_id ? pipedriveCardUrl(s.deal_id) : null,
+    }));
+
     // ── KPIs ───────────────────────────────────────────────────────────
     const abertos = deals.filter((d) => d.status === "open");
     const travados = deals.filter((d) => estaTravado(d, agora.getTime()));
@@ -511,11 +565,16 @@ export async function GET(request: Request) {
         porTipo: errosPorTipo,
         medianaResolucaoMin,
       },
-      placar: { disponivel: temSupabase && !supabaseErro, total: ranking.reduce((s, r) => s + r.pontos, 0), ranking },
+      placar: { disponivel: sorteioDisponivel, total: ranking.reduce((s, r) => s + r.pontos, 0), ranking },
+      equipe,
       sorteio: {
-        disponivel: temSupabase && !supabaseErro,
-        total: sorteioFiltrado.length,
-        porFonte: contar(sorteioFiltrado.map((s) => ({ chave: s.source, rotulo: s.source }))),
+        disponivel: sorteioDisponivel,
+        aproximado: !sorteioDisponivel,
+        total: sorteioDisponivel ? sorteioFiltrado.length : preCadastroCards.length,
+        porFonte: sorteioDisponivel
+          ? contar(sorteioFiltrado.map((s) => ({ chave: s.source, rotulo: "Pré-cadastro (LP)" })))
+          : [{ chave: "pre_cadastro", rotulo: "Pré-cadastro (LP)", n: preCadastroCards.length }],
+        entradas: entradasSorteio,
       },
       legado: {
         abertos: legado.filter((d) => d.status === "open").length,

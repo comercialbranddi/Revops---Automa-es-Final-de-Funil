@@ -69,6 +69,29 @@ export type EtapaFunil = {
 
 export type SerieHora = { hora: string; criados: number; concluidos: number; reprovados: number };
 
+/** Uma linha por pessoa do time que captou lead no evento. */
+export type Participante = {
+  pessoa: string;
+  estande: number;
+  qrEstande: number;
+  preCadastro: number;
+  semOrigem: number;
+  total: number;
+  reunioesAgendadas: number;
+  reunioesRealizadas: number;
+  relatorios: number;
+  emailPessoal: number;
+  pontos: number | null;
+};
+
+export type EntradaSorteio = {
+  nome: string;
+  email: string | null;
+  fonte: string;
+  criadoEm: string;
+  link: string | null;
+};
+
 export type EventosData = {
   atualizadoEm: string;
   periodoDias: number;
@@ -113,10 +136,14 @@ export type EventosData = {
     total: number;
     ranking: { pessoa: string; pontos: number; leads: number; reunioes: number; contratos: number }[];
   };
+  equipe: Participante[];
   sorteio: {
     disponivel: boolean;
+    /** true quando o número veio do Pipedrive por aproximação, não do Supabase. */
+    aproximado: boolean;
     total: number;
     porFonte: Contagem[];
+    entradas: EntradaSorteio[];
   };
   legado: { abertos: number; perdidos: number };
 };

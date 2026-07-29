@@ -284,69 +284,45 @@ export function Relatorios({ cards }: { cards: CardResumo[] }) {
   );
 }
 
-export function PlacarESorteio({
-  placar,
-  sorteio,
-}: {
-  placar: EventosData["placar"];
-  sorteio: EventosData["sorteio"];
-}) {
+export function Placar({ placar }: { placar: EventosData["placar"] }) {
   if (!placar.disponivel) {
     return (
       <Vazio>
-        Placar e sorteio vivem em <code className="text-slate-400">evento_placar_pontos</code> e{" "}
-        <code className="text-slate-400">evento_sorteio_entries</code> no Supabase da Lia. Falta a credencial.
+        O placar vive em <code className="text-slate-400">evento_placar_pontos</code> no Supabase da Lia.
+        Falta a credencial.
       </Vazio>
     );
   }
+  if (!placar.ranking.length) {
+    return <Vazio>Nenhum ponto registrado no período.</Vazio>;
+  }
   return (
-    <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-      <Painel>
-        <div className="mb-3 flex items-baseline justify-between">
-          <h4 className="text-sm font-medium text-slate-300">Ranking da equipe</h4>
-          <span className="text-xs text-slate-500">
-            {placar.total.toLocaleString("pt-BR")} pontos no total
-          </span>
-        </div>
-        {placar.ranking.length === 0 ? (
-          <p className="text-sm text-slate-600">Nenhum ponto registrado no período.</p>
-        ) : (
-          <ol className="space-y-2">
-            {placar.ranking.map((r, i) => (
-              <li
-                key={r.pessoa}
-                className="flex items-center justify-between gap-3 rounded-lg bg-slate-950/40 px-3 py-2"
-              >
-                <span className="flex items-center gap-3">
-                  <span className="w-5 text-right tabular-nums text-slate-600">{i + 1}</span>
-                  <span className="font-medium text-slate-200">{r.pessoa}</span>
-                </span>
-                <span className="flex items-center gap-4 text-xs text-slate-500">
-                  <span>{r.leads} leads</span>
-                  <span>{r.reunioes} reuniões</span>
-                  <span>{r.contratos} contratos</span>
-                  <strong className="w-14 text-right text-base tabular-nums text-cyan-300">
-                    {r.pontos}
-                  </strong>
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </Painel>
-      <Painel>
-        <h4 className="text-sm font-medium text-slate-300">Sorteio do iPhone</h4>
-        <div className="mt-2 text-3xl font-semibold tabular-nums text-slate-100">{sorteio.total}</div>
-        <p className="text-xs text-slate-500">entradas de participação</p>
-        <div className="mt-4 space-y-2">
-          {sorteio.porFonte.map((f) => (
-            <div key={f.chave} className="flex justify-between text-sm">
-              <span className="text-slate-400">{f.rotulo}</span>
-              <span className="tabular-nums text-slate-300">{f.n}</span>
-            </div>
-          ))}
-        </div>
-      </Painel>
-    </div>
+    <Painel>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h4 className="text-sm font-medium text-slate-300">Ranking da equipe</h4>
+        <span className="text-xs text-slate-500">
+          {placar.total.toLocaleString("pt-BR")} pontos no total
+        </span>
+      </div>
+      <ol className="space-y-2">
+        {placar.ranking.map((r, i) => (
+          <li
+            key={r.pessoa}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-950/40 px-3 py-2"
+          >
+            <span className="flex items-center gap-3">
+              <span className="w-5 text-right tabular-nums text-slate-600">{i + 1}</span>
+              <span className="font-medium text-slate-200">{r.pessoa}</span>
+            </span>
+            <span className="flex items-center gap-4 text-xs text-slate-500">
+              <span>{r.leads} leads</span>
+              <span>{r.reunioes} reuniões</span>
+              <span>{r.contratos} contratos</span>
+              <strong className="w-14 text-right text-base tabular-nums text-cyan-300">{r.pontos}</strong>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </Painel>
   );
 }

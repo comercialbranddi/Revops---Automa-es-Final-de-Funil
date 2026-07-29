@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { EventosData } from "@/lib/tipos";
 import { Kpi, Secao, fmtData, fmtDuracao } from "@/components/ui";
 import { Alertas, AoVivo, Funil, MovimentoPorHora, Novos } from "@/components/fluxo";
-import { Clientes, Erros, PlacarESorteio, Relatorios, Reprovados } from "@/components/erros";
+import { Clientes, Erros, Placar, Relatorios, Reprovados } from "@/components/erros";
+import { Participantes, Sorteio } from "@/components/equipe";
 
 const PERIODOS = [
   { dias: 1, rotulo: "Hoje" },
@@ -15,11 +16,19 @@ const PERIODOS = [
 
 const INTERVALO_MS = 60_000;
 
+type Aba = "funil" | "sorteio";
+
+const ABAS: { chave: Aba; rotulo: string }[] = [
+  { chave: "funil", rotulo: "Funil e erros" },
+  { chave: "sorteio", rotulo: "Sorteio e equipe" },
+];
+
 export default function Home() {
   const [data, setData] = useState<EventosData | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [dias, setDias] = useState(7);
+  const [aba, setAba] = useState<Aba>("funil");
   const [novosDesdeUltima, setNovosDesdeUltima] = useState(0);
   const totalAnterior = useRef<number | null>(null);
 
@@ -95,7 +104,23 @@ export default function Home() {
             </span>
           )}
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-4">
+        <div className="mt-5 flex flex-wrap items-center gap-1 border-b border-slate-800">
+          {ABAS.map((a) => (
+            <button
+              key={a.chave}
+              onClick={() => setAba(a.chave)}
+              className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition ${
+                aba === a.chave
+                  ? "border-cyan-400 text-cyan-300"
+                  : "border-transparent text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              {a.rotulo}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="text-xs text-slate-500">Período:</span>
           {PERIODOS.map((p) => (
             <button
@@ -120,7 +145,7 @@ export default function Home() {
         </div>
       )}
 
-      {data && (
+      {data && aba === "funil" && (
         <>
           <Secao
             titulo="O que precisa de atenção"
@@ -249,22 +274,48 @@ export default function Home() {
             <Relatorios cards={data.relatorios} />
           </Secao>
 
+          <Rodape />
+        </>
+      )}
+
+      {data && aba === "sorteio" && (
+        <>
           <Secao
-            titulo="Placar e sorteio"
-            subtitulo="Pontuação da equipe de vendas e entradas do sorteio do iPhone, direto do Supabase."
+            titulo="Sorteio do iPhone"
+            subtitulo="Quem está concorrendo — a lista nominal que serve pra sortear."
           >
-            <PlacarESorteio placar={data.placar} sorteio={data.sorteio} />
+            <Sorteio sorteio={data.sorteio} />
           </Secao>
 
-          <footer className="mt-16 border-t border-slate-800 pt-6 text-xs leading-relaxed text-slate-600">
-            Fontes: Pipedrive (pipeline 25, abertos via v1 e perdidos/ganhos via v2) e Supabase da Lia
-            (<code>deal_processing_logs</code>, <code>automation_errors</code>,{" "}
-            <code>event_report_dispatches</code>, <code>evento_placar_pontos</code>,{" "}
-            <code>evento_sorteio_entries</code>). Atualiza sozinho a cada 60s. Só o pipeline de Eventos —
-            nenhum dado de outros funis entra aqui.
-          </footer>
+          <Secao
+            titulo="Cada participante do time"
+            subtitulo="Quantos leads cada pessoa trouxe, por canal, e no que eles viraram."
+          >
+            <Participantes equipe={data.equipe} placarDisponivel={data.placar.disponivel} />
+          </Secao>
+
+          <Secao
+            titulo="Placar de pontos"
+            subtitulo="1pt lead capturado · 30pt reunião agendada · 300pt contrato fechado."
+          >
+            <Placar placar={data.placar} />
+          </Secao>
+
+          <Rodape />
         </>
       )}
     </main>
+  );
+}
+
+function Rodape() {
+  return (
+    <footer className="mt-16 border-t border-slate-800 pt-6 text-xs leading-relaxed text-slate-600">
+      Fontes: Pipedrive (pipeline 25, abertos via v1 e perdidos/ganhos via v2) e Supabase da Lia
+      (<code>deal_processing_logs</code>, <code>automation_errors</code>,{" "}
+      <code>event_report_dispatches</code>, <code>evento_placar_pontos</code>,{" "}
+      <code>evento_sorteio_entries</code>). Atualiza sozinho a cada 60s. Só o pipeline de Eventos —
+      nenhum dado de outros funis entra aqui.
+    </footer>
   );
 }
