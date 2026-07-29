@@ -79,6 +79,8 @@ export type Participante = {
   total: number;
   reunioesAgendadas: number;
   reunioesRealizadas: number;
+  /** agendadas + realizadas — é o número que o placar remunera a 30pt cada. */
+  reunioes: number;
   relatorios: number;
   emailPessoal: number;
   pontos: number | null;
@@ -86,10 +88,8 @@ export type Participante = {
 
 export type EntradaSorteio = {
   nome: string;
-  email: string | null;
-  fonte: string;
-  criadoEm: string;
-  link: string | null;
+  entradas: number;
+  fontes: string[];
 };
 
 export type EventosData = {
@@ -133,15 +133,22 @@ export type EventosData = {
   };
   placar: {
     disponivel: boolean;
+    /** true só com a service key: aí dá pra quebrar os pontos por motivo. */
+    detalhado: boolean;
     total: number;
-    ranking: { pessoa: string; pontos: number; leads: number; reunioes: number; contratos: number }[];
+    ranking: {
+      pessoa: string;
+      pontos: number;
+      leads: number | null;
+      reunioes: number | null;
+      contratos: number | null;
+    }[];
   };
   equipe: Participante[];
   sorteio: {
     disponivel: boolean;
-    /** true quando o número veio do Pipedrive por aproximação, não do Supabase. */
-    aproximado: boolean;
     total: number;
+    participantes: number;
     porFonte: Contagem[];
     entradas: EntradaSorteio[];
   };

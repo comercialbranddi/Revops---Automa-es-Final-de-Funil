@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import {
   fetchEventoDeals,
   fetchDealNotes,
+  fetchStageNames,
   pipedriveCardUrl,
+  ETAPAS_DE_PARADA,
   FUNIL_ORDEM,
   STAGES,
   STAGE_LEGADO,
@@ -22,6 +24,12 @@ import {
   type PlacarPonto,
   type SorteioEntry,
 } from "@/lib/supabase";
+import {
+  fetchPlacarPublico,
+  fetchSorteioPublico,
+  type PlacarPublico,
+  type SorteioPublico,
+} from "@/lib/evento-publico";
 import {
   classificarPorNotas,
   corteDoPeriodo,
@@ -45,8 +53,9 @@ import type {
 
 export const dynamic = "force-dynamic";
 
+// 503 fica de fora: ele é o destino planejado do e-mail de domínio pessoal
+// (ver ETAPAS_DE_PARADA), não um desfecho bom. Hoje está vazio nos dois casos.
 const ETAPAS_FINAIS_OK = [
-  STAGES.RELATORIO_ENVIADO,
   STAGES.PROSPECCAO_ATIVA,
   STAGES.SEM_RESPOSTA,
   STAGES.RESPONDEU,
@@ -101,7 +110,16 @@ export async function GET(request: Request) {
   const corte = corteDoPeriodo(periodoDias, agora);
 
   try {
-    const todos = await fetchEventoDeals();
+    // Placar e sorteio vêm da Edge Function pública (mesma fonte do
+    // formoff/placar.html) — não dependem de credencial. Se ela cair, o resto
+    // do painel continua de pé.
+    const [todos, nomesEtapa, placarPub, sorteioPub] = await Promise.all([
+      fetchEventoDeals(),
+      fetchStageNames(),
+      fetchPlacarPublico().catch(() => null as PlacarPublico | null),
+      fetchSorteioPublico().catch(() => null as SorteioPublico | null),
+    ]);
+    const nomeEtapa = (id: number) => nomesEtapa[id] || STAGE_NAMES[id] || String(id);
 
     // Cards do evento corrente = tudo fora do estágio legado, dentro do período.
     const legado = todos.filter((d) => d.stageId === STAGE_LEGADO);
@@ -151,7 +169,7 @@ export async function GET(request: Request) {
         const chave = motivos.get(d.id)?.chave;
         return (
           (chave === "nao_classificado" || chave === "sem_log") &&
-          (d.stageId === STAGES.RELATORIO_REPROVADO || estaTravado(d, agora.getTime()))
+          (ETAPAS_DE_PARADA.includes(d.stageId) || estaTravado(d, agora.getTime()))
         );
       })
       .sort((a, b) => (a.addTime < b.addTime ? 1 : -1));
@@ -172,7 +190,7 @@ export async function GET(request: Request) {
       return {
         id: d.id,
         org: nomeOrg(d),
-        estagio: STAGE_NAMES[d.stageId] || String(d.stageId),
+        estagio: nomeEtapa(d.stageId),
         stageId: d.stageId,
         status: d.status,
         origem: d.origem,
@@ -194,7 +212,7 @@ export async function GET(request: Request) {
       const naEtapa = deals.filter((d) => d.stageId === stageId);
       return {
         stageId,
-        nome: STAGE_NAMES[stageId],
+        nome: nomeEtapa(stageId),
         abertos: naEtapa.filter((d) => d.status === "open").length,
         perdidos: naEtapa.filter((d) => d.status === "lost").length,
         ganhos: naEtapa.filter((d) => d.status === "won").length,
@@ -230,7 +248,7 @@ export async function GET(request: Request) {
         const b = buckets.get(horaBrt(d.stageChangeTime!));
         if (!b) continue;
         if (ETAPAS_FINAIS_OK.includes(d.stageId)) b.concluidos += 1;
-        if (d.stageId === STAGES.RELATORIO_REPROVADO) b.reprovados += 1;
+        if (ETAPAS_DE_PARADA.includes(d.stageId)) b.reprovados += 1;
       }
     }
     const porHora = [...buckets.values()];
@@ -249,7 +267,7 @@ export async function GET(request: Request) {
         return {
           id: l.deal_id,
           org: deal ? nomeOrg(deal) : `#${l.deal_id}`,
-          estagio: deal ? STAGE_NAMES[deal.stageId] || String(deal.stageId) : "—",
+          estagio: deal ? nomeEtapa(deal.stageId) : "—",
           statusLog: l.status || "idle",
           etapaLog: l.stage,
           ultimoPasso: ultimo?.msg || "sem passos registrados",
@@ -283,7 +301,7 @@ export async function GET(request: Request) {
       .map(resumo);
 
     const reprovados = deals
-      .filter((d) => d.stageId === STAGES.RELATORIO_REPROVADO && motivos.get(d.id)?.chave !== "cliente_ativo")
+      .filter((d) => ETAPAS_DE_PARADA.includes(d.stageId) && motivos.get(d.id)?.chave !== "cliente_ativo")
       .sort((a, b) => (a.addTime < b.addTime ? 1 : -1))
       .map(resumo);
 
@@ -332,34 +350,48 @@ export async function GET(request: Request) {
       (e) => new Date(e.resolvidoEm!).getTime() >= limite24h
     ).length;
 
-    // ── Placar e sorteio ───────────────────────────────────────────────
-    const dealsDoPeriodo = new Set(ids);
-    const placarFiltrado = placarRows.filter(
-      (p) => !p.deal_id || dealsDoPeriodo.has(p.deal_id)
-    );
-    const rankingMapa = new Map<
+    // ── Placar ─────────────────────────────────────────────────────────
+    // O placar é um LEDGER acumulado desde o começo do evento — não filtra por
+    // período nem por etapa atual do card. É de propósito: quem agendou uma
+    // reunião não perde o ponto quando o card anda. A quebra por motivo só
+    // existe lendo evento_placar_pontos direto (precisa da service key); o
+    // endpoint público devolve só o total por pessoa.
+    const placarDetalhado = placarRows.length > 0;
+    const pontosPorPessoa = new Map<string, number>();
+    const detalhePorPessoa = new Map<
       string,
-      { pessoa: string; pontos: number; leads: number; reunioes: number; contratos: number }
+      { leads: number; reunioes: number; contratos: number }
     >();
-    for (const p of placarFiltrado) {
-      const r =
-        rankingMapa.get(p.person) ||
-        { pessoa: p.person, pontos: 0, leads: 0, reunioes: 0, contratos: 0 };
-      r.pontos += p.points;
-      if (p.reason === "lead_capturado") r.leads += 1;
-      if (p.reason === "reuniao_agendada" || p.reason === "reuniao_realizada") r.reunioes += 1;
-      if (p.reason === "contrato_fechado") r.contratos += 1;
-      rankingMapa.set(p.person, r);
-    }
-    const ranking = [...rankingMapa.values()].sort((a, b) => b.pontos - a.pontos);
 
-    const sorteioFiltrado = sorteioRows.filter((s) => !s.deal_id || dealsDoPeriodo.has(s.deal_id));
+    if (placarDetalhado) {
+      for (const p of placarRows) {
+        pontosPorPessoa.set(p.person, (pontosPorPessoa.get(p.person) ?? 0) + p.points);
+        const d = detalhePorPessoa.get(p.person) || { leads: 0, reunioes: 0, contratos: 0 };
+        if (p.reason === "lead_capturado") d.leads += 1;
+        if (p.reason === "reuniao_agendada" || p.reason === "reuniao_realizada") d.reunioes += 1;
+        if (p.reason === "contrato_fechado") d.contratos += 1;
+        detalhePorPessoa.set(p.person, d);
+      }
+    } else if (placarPub) {
+      for (const [pessoa, pontos] of Object.entries(placarPub.pontosPorPessoa)) {
+        pontosPorPessoa.set(pessoa, pontos);
+      }
+    }
+
+    const ranking = [...pontosPorPessoa.entries()]
+      .map(([pessoa, pontos]) => {
+        const d = detalhePorPessoa.get(pessoa);
+        return {
+          pessoa,
+          pontos,
+          leads: d?.leads ?? null,
+          reunioes: d?.reunioes ?? null,
+          contratos: d?.contratos ?? null,
+        };
+      })
+      .sort((a, b) => b.pontos - a.pontos);
 
     // ── Participantes (quem do time trouxe cada lead) ──────────────────
-    const pontosPorPessoa = new Map<string, number>();
-    for (const p of placarFiltrado) {
-      pontosPorPessoa.set(p.person, (pontosPorPessoa.get(p.person) ?? 0) + p.points);
-    }
 
     const equipeMapa = new Map<string, Participante>();
     for (const d of deals) {
@@ -375,6 +407,7 @@ export async function GET(request: Request) {
             total: 0,
             reunioesAgendadas: 0,
             reunioesRealizadas: 0,
+            reunioes: 0,
             relatorios: 0,
             emailPessoal: 0,
             pontos: null,
@@ -384,6 +417,8 @@ export async function GET(request: Request) {
         else if (d.origem === "QR Estande") linha.qrEstande += 1;
         else if (d.origem === "Pré-cadastro LinkedIn") linha.preCadastro += 1;
         else linha.semOrigem += 1;
+        // Conta card em Reunião Agendada/Realizada em QUALQUER status (aberto,
+        // ganho ou perdido) — o card ganho continua tendo tido a reunião.
         if (d.stageId === STAGES.REUNIAO_AGENDADA) linha.reunioesAgendadas += 1;
         if (d.stageId === STAGES.REUNIAO_REALIZADA) linha.reunioesRealizadas += 1;
         if (d.relatorioHtml || dispatchPorDeal.has(d.id)) linha.relatorios += 1;
@@ -391,21 +426,43 @@ export async function GET(request: Request) {
         equipeMapa.set(pessoa, linha);
       }
     }
-    const equipe = [...equipeMapa.values()]
-      .map((l) => ({ ...l, pontos: pontosPorPessoa.get(l.pessoa) ?? null }))
-      .sort((a, b) => b.total - a.total);
 
-    // Sem Supabase o total do sorteio é aproximado pelos cards de pré-cadastro:
-    // é o único canal que grava entrada hoje, mas a entrada é por PESSOA e o
-    // card é por organização, então os números não batem exatamente.
-    const sorteioDisponivel = temSupabase && !supabaseErro;
-    const preCadastroCards = deals.filter((d) => d.origem === "Pré-cadastro LinkedIn");
-    const entradasSorteio = sorteioFiltrado.map((s) => ({
-      nome: s.person_name,
-      email: s.email,
-      fonte: s.source,
-      criadoEm: s.created_at,
-      link: s.deal_id ? pipedriveCardUrl(s.deal_id) : null,
+    // Pessoa que pontuou mas não tem card no período ainda assim aparece na
+    // tabela — senão o total do painel não fecha com o placar.
+    for (const pessoa of pontosPorPessoa.keys()) {
+      if (!equipeMapa.has(pessoa)) {
+        equipeMapa.set(pessoa, {
+          pessoa,
+          estande: 0,
+          qrEstande: 0,
+          preCadastro: 0,
+          semOrigem: 0,
+          total: 0,
+          reunioesAgendadas: 0,
+          reunioesRealizadas: 0,
+          reunioes: 0,
+          relatorios: 0,
+          emailPessoal: 0,
+          pontos: null,
+        });
+      }
+    }
+
+    const equipe = [...equipeMapa.values()]
+      .map((l) => ({
+        ...l,
+        // O ledger do placar é a fonte boa pra reunião: ele registra o evento
+        // quando acontece, então não some quando o card muda de etapa. Só cai
+        // pra etapa atual do card quando não há credencial pra ler o ledger.
+        reunioes: detalhePorPessoa.get(l.pessoa)?.reunioes ?? l.reunioesAgendadas + l.reunioesRealizadas,
+        pontos: pontosPorPessoa.get(l.pessoa) ?? null,
+      }))
+      .sort((a, b) => (b.pontos ?? 0) - (a.pontos ?? 0) || b.total - a.total);
+
+    const entradasSorteio = (sorteioPub?.porPessoa || []).map((p) => ({
+      nome: p.nome,
+      entradas: p.entradas,
+      fontes: Object.keys(p.fontes),
     }));
 
     // ── KPIs ───────────────────────────────────────────────────────────
@@ -415,7 +472,7 @@ export async function GET(request: Request) {
     const umaHoraAtras = agora.getTime() - 3600 * 1000;
     const comRelatorio = deals.filter((d) => d.relatorioHtml || dispatchPorDeal.has(d.id));
     const processados = deals.filter(
-      (d) => ETAPAS_FINAIS_OK.includes(d.stageId) || d.stageId === STAGES.RELATORIO_REPROVADO
+      (d) => ETAPAS_FINAIS_OK.includes(d.stageId) || ETAPAS_DE_PARADA.includes(d.stageId)
     );
 
     const tempoAteRelatorio = deals
@@ -565,15 +622,25 @@ export async function GET(request: Request) {
         porTipo: errosPorTipo,
         medianaResolucaoMin,
       },
-      placar: { disponivel: sorteioDisponivel, total: ranking.reduce((s, r) => s + r.pontos, 0), ranking },
+      placar: {
+        disponivel: ranking.length > 0,
+        detalhado: placarDetalhado,
+        total: ranking.reduce((s, r) => s + r.pontos, 0),
+        ranking,
+      },
       equipe,
       sorteio: {
-        disponivel: sorteioDisponivel,
-        aproximado: !sorteioDisponivel,
-        total: sorteioDisponivel ? sorteioFiltrado.length : preCadastroCards.length,
-        porFonte: sorteioDisponivel
-          ? contar(sorteioFiltrado.map((s) => ({ chave: s.source, rotulo: "Pré-cadastro (LP)" })))
-          : [{ chave: "pre_cadastro", rotulo: "Pré-cadastro (LP)", n: preCadastroCards.length }],
+        disponivel: Boolean(sorteioPub),
+        total: sorteioPub?.totalEntradas ?? 0,
+        participantes: sorteioPub?.totalParticipantes ?? 0,
+        porFonte: contar(
+          entradasSorteio.flatMap((e) =>
+            e.fontes.map((f) => ({
+              chave: f,
+              rotulo: f === "pre_cadastro" ? "Pré-cadastro (LP)" : f,
+            }))
+          )
+        ),
         entradas: entradasSorteio,
       },
       legado: {

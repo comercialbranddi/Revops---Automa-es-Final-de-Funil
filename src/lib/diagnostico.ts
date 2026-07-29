@@ -1,5 +1,5 @@
 import type { DealProcessingLog, LogStep } from "./supabase";
-import { STAGES, type EventoDeal } from "./pipedrive";
+import { ETAPAS_DE_PARADA, STAGES, type EventoDeal } from "./pipedrive";
 
 /**
  * Classificação do estado de cada card a partir do log de processamento que a
@@ -255,7 +255,7 @@ export function motivoDoCard(deal: EventoDeal, log: DealProcessingLog | undefine
  * como "sem motivo", e hoje são a maior fatia do estágio.
  */
 function nasceuEmReprovado(deal: EventoDeal): boolean {
-  if (deal.stageId !== STAGES.RELATORIO_REPROVADO) return false;
+  if (!ETAPAS_DE_PARADA.includes(deal.stageId)) return false;
   if (!deal.stageChangeTime) return true;
   const delta = new Date(deal.stageChangeTime).getTime() - new Date(deal.addTime).getTime();
   return Math.abs(delta) < 60_000;

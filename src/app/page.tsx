@@ -291,7 +291,7 @@ export default function Home() {
             titulo="Cada participante do time"
             subtitulo="Quantos leads cada pessoa trouxe, por canal, e no que eles viraram."
           >
-            <Participantes equipe={data.equipe} placarDisponivel={data.placar.disponivel} />
+            <Participantes equipe={data.equipe} placar={data.placar} />
           </Secao>
 
           <Secao

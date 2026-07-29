@@ -285,23 +285,20 @@ export function Relatorios({ cards }: { cards: CardResumo[] }) {
 }
 
 export function Placar({ placar }: { placar: EventosData["placar"] }) {
-  if (!placar.disponivel) {
+  if (!placar.disponivel || !placar.ranking.length) {
     return (
       <Vazio>
-        O placar vive em <code className="text-slate-400">evento_placar_pontos</code> no Supabase da Lia.
-        Falta a credencial.
+        Nenhum ponto registrado — ou a Edge Function{" "}
+        <code className="text-slate-400">formoff-pipedrive</code>, que serve o placar, não respondeu.
       </Vazio>
     );
   }
-  if (!placar.ranking.length) {
-    return <Vazio>Nenhum ponto registrado no período.</Vazio>;
-  }
   return (
     <Painel>
-      <div className="mb-3 flex items-baseline justify-between">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h4 className="text-sm font-medium text-slate-300">Ranking da equipe</h4>
         <span className="text-xs text-slate-500">
-          {placar.total.toLocaleString("pt-BR")} pontos no total
+          {placar.total.toLocaleString("pt-BR")} pontos no total · acumulado do evento inteiro
         </span>
       </div>
       <ol className="space-y-2">
@@ -315,9 +312,9 @@ export function Placar({ placar }: { placar: EventosData["placar"] }) {
               <span className="font-medium text-slate-200">{r.pessoa}</span>
             </span>
             <span className="flex items-center gap-4 text-xs text-slate-500">
-              <span>{r.leads} leads</span>
-              <span>{r.reunioes} reuniões</span>
-              <span>{r.contratos} contratos</span>
+              {r.leads !== null && <span>{r.leads} leads</span>}
+              {r.reunioes !== null && <span>{r.reunioes} reuniões</span>}
+              {r.contratos !== null && <span>{r.contratos} contratos</span>}
               <strong className="w-14 text-right text-base tabular-nums text-cyan-300">{r.pontos}</strong>
             </span>
           </li>

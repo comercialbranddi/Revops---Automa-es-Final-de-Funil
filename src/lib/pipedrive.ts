@@ -289,6 +289,35 @@ export async function fetchEventoDeals(): Promise<EventoDeal[]> {
   return [...abertos, ...perdidos, ...ganhos];
 }
 
+/**
+ * Nomes das etapas lidos ao vivo. O pipe 25 está em reforma (o estágio 503,
+ * hoje "Relatório Enviado" e vazio, vai virar "E-mails Inválidos"), então
+ * fixar os rótulos no código faria o painel mentir no dia da renomeação.
+ * Fail-soft: se a chamada falhar, ficam os nomes conhecidos.
+ */
+export async function fetchStageNames(): Promise<Record<number, string>> {
+  try {
+    const json = await getJson(
+      `${PIPEDRIVE_V1}/stages?pipeline_id=${PIPELINE_EVENTOS}&api_token=${token()}`
+    );
+    const nomes: Record<number, string> = { ...STAGE_NAMES };
+    for (const s of (json.data || []) as { id: number; name: string }[]) {
+      nomes[s.id] = s.name;
+    }
+    return nomes;
+  } catch {
+    return { ...STAGE_NAMES };
+  }
+}
+
+/**
+ * Etapas onde o card para sem virar prospecção. 503 entra aqui porque é pra
+ * onde a captação vai mandar o e-mail de domínio pessoal — hoje ainda está
+ * vazio, então incluir agora não muda número nenhum e evita ter que lembrar
+ * disso no dia do deploy.
+ */
+export const ETAPAS_DE_PARADA: number[] = [STAGES.RELATORIO_REPROVADO, STAGES.RELATORIO_ENVIADO];
+
 /** Notas de um card — usado só como fallback pros poucos cards sem log no Supabase. */
 export async function fetchDealNotes(dealId: number): Promise<string[]> {
   try {
