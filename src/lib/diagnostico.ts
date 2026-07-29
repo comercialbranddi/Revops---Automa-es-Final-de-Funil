@@ -232,27 +232,39 @@ export function motivoDoCard(deal: EventoDeal, log: DealProcessingLog | undefine
       detalhe: deal.lostReason,
     };
   }
+  // A etapa "E-mails Reprovados" existe pra esse motivo e só pra ele — vale
+  // mais que o log, inclusive pros cards que foram movidos pra lá na mão.
+  if (deal.stageId === STAGES.EMAILS_REPROVADOS) return CONTATO_INVALIDO_POR_ETAPA;
+
   const porLog = classificarPorLog(log?.steps ?? null);
   if (porLog) return porLog;
-  if (nasceuEmReprovado(deal)) {
-    return {
-      chave: "contato_invalido",
-      rotulo: "E-mail pessoal (domínio genérico)",
-      severidade: "descarte",
-      detalhe:
-        "Card já nasceu em Relatório Reprovado — a captação barrou o e-mail de domínio genérico " +
-        "(gmail/hotmail/etc) antes de qualquer automação. Sem diagnóstico e sem ponto pro colaborador.",
-    };
-  }
+  if (nasceuEmReprovado(deal)) return CONTATO_INVALIDO_NA_ENTRADA;
   return log ? NAO_CLASSIFICADO : SEM_LOG;
 }
 
+const CONTATO_INVALIDO_POR_ETAPA: Motivo = {
+  chave: "contato_invalido",
+  rotulo: "E-mail pessoal (domínio genérico)",
+  severidade: "descarte",
+  detalhe:
+    "Card está na etapa E-mails Reprovados: o e-mail informado é de domínio genérico " +
+    "(gmail/hotmail/etc). Sem diagnóstico e sem ponto pro colaborador.",
+};
+
+const CONTATO_INVALIDO_NA_ENTRADA: Motivo = {
+  chave: "contato_invalido",
+  rotulo: "E-mail pessoal (domínio genérico)",
+  severidade: "descarte",
+  detalhe:
+    "Card já nasceu em Relatório Reprovado — a captação barrou o e-mail de domínio genérico " +
+    "antes de qualquer automação. Sem diagnóstico e sem ponto pro colaborador.",
+};
+
 /**
- * Card criado JÁ em Relatório Reprovado, sem nunca passar por Monitoria. As
- * duas Edge Functions de captação (pre-ecomm-lead e formoff-pipedrive) fazem
- * isso num único caso: e-mail de domínio pessoal. Como nenhuma automação chega
- * a rodar, esses cards não têm log nenhum — sem esta inferência eles apareceriam
- * como "sem motivo", e hoje são a maior fatia do estágio.
+ * Card criado JÁ numa etapa de parada, sem nunca passar por Monitoria. As duas
+ * Edge Functions de captação fazem isso num único caso: e-mail de domínio
+ * pessoal. Continua valendo enquanto o deploy que aponta essa checagem pro 503
+ * não sai — até lá os cards novos ainda nascem no 502.
  */
 function nasceuEmReprovado(deal: EventoDeal): boolean {
   if (!ETAPAS_DE_PARADA.includes(deal.stageId)) return false;

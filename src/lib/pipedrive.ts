@@ -6,7 +6,10 @@ export const STAGES = {
   NOVO_LEAD: 315,
   MONITORIA: 501,
   RELATORIO_REPROVADO: 502,
-  RELATORIO_ENVIADO: 503,
+  // 503 era "Relatório Enviado" (sempre vazio) e foi reaproveitado em 29/07
+  // pra separar o lead que entra com e-mail de domínio pessoal dos outros
+  // motivos de reprovação.
+  EMAILS_REPROVADOS: 503,
   PROSPECCAO_ATIVA: 504,
   SEM_RESPOSTA: 505,
   RESPONDEU: 506,
@@ -19,7 +22,7 @@ export const STAGE_NAMES: Record<number, string> = {
   315: "Novo Lead",
   501: "Monitoria",
   502: "Relatório Reprovado",
-  503: "Relatório Enviado",
+  503: "E-mails Reprovados",
   504: "Prospecção Ativa",
   505: "Sem resposta",
   506: "Respondeu",
@@ -34,7 +37,7 @@ export const FUNIL_ORDEM: number[] = [
   STAGES.NOVO_LEAD,
   STAGES.MONITORIA,
   STAGES.RELATORIO_REPROVADO,
-  STAGES.RELATORIO_ENVIADO,
+  STAGES.EMAILS_REPROVADOS,
   STAGES.PROSPECCAO_ATIVA,
   STAGES.SEM_RESPOSTA,
   STAGES.RESPONDEU,
@@ -290,10 +293,9 @@ export async function fetchEventoDeals(): Promise<EventoDeal[]> {
 }
 
 /**
- * Nomes das etapas lidos ao vivo. O pipe 25 está em reforma (o estágio 503,
- * hoje "Relatório Enviado" e vazio, vai virar "E-mails Inválidos"), então
- * fixar os rótulos no código faria o painel mentir no dia da renomeação.
- * Fail-soft: se a chamada falhar, ficam os nomes conhecidos.
+ * Nomes das etapas lidos ao vivo — o pipe 25 já teve uma etapa renomeada em
+ * pleno evento (503) e fixar os rótulos no código faz o painel mentir no dia
+ * seguinte. Fail-soft: se a chamada falhar, ficam os nomes conhecidos.
  */
 export async function fetchStageNames(): Promise<Record<number, string>> {
   try {
@@ -310,13 +312,8 @@ export async function fetchStageNames(): Promise<Record<number, string>> {
   }
 }
 
-/**
- * Etapas onde o card para sem virar prospecção. 503 entra aqui porque é pra
- * onde a captação vai mandar o e-mail de domínio pessoal — hoje ainda está
- * vazio, então incluir agora não muda número nenhum e evita ter que lembrar
- * disso no dia do deploy.
- */
-export const ETAPAS_DE_PARADA: number[] = [STAGES.RELATORIO_REPROVADO, STAGES.RELATORIO_ENVIADO];
+/** Etapas onde o card para sem virar prospecção. */
+export const ETAPAS_DE_PARADA: number[] = [STAGES.RELATORIO_REPROVADO, STAGES.EMAILS_REPROVADOS];
 
 /** Notas de um card — usado só como fallback pros poucos cards sem log no Supabase. */
 export async function fetchDealNotes(dealId: number): Promise<string[]> {
