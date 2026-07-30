@@ -562,7 +562,7 @@ export async function GET(request: Request) {
         texto:
           `${kpis.emailsFalhados} card(s) com falha ao enviar e-mail (relatório ou Envio 1) — ` +
           `credencial GMAIL_SDR1_APP_PASSWORD do branddi-report-engine (Vercel). O card segue o funil ` +
-          "normalmente, só o e-mail pro lead que não sai. Ver aba \"E-mails não enviados\".",
+          "normalmente, só o e-mail pro lead que não sai — então nenhuma outra seção do painel acusa isso.",
       });
     }
 

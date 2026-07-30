@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { EventosData } from "@/lib/tipos";
 import { Kpi, Secao, fmtData, fmtDuracao } from "@/components/ui";
 import { Alertas, AoVivo, Funil, MovimentoPorHora, Novos } from "@/components/fluxo";
-import { Clientes, EmailsFalhados, Erros, Placar, Relatorios, Reprovados } from "@/components/erros";
+import { Clientes, Erros, Placar, Relatorios, Reprovados } from "@/components/erros";
 import { Participantes, Sorteio } from "@/components/equipe";
 
 const PERIODOS = [
@@ -16,12 +16,11 @@ const PERIODOS = [
 
 const INTERVALO_MS = 60_000;
 
-type Aba = "funil" | "sorteio" | "emails";
+type Aba = "funil" | "sorteio";
 
 const ABAS: { chave: Aba; rotulo: string }[] = [
   { chave: "funil", rotulo: "Funil e erros" },
   { chave: "sorteio", rotulo: "Sorteio e equipe" },
-  { chave: "emails", rotulo: "E-mails não enviados" },
 ];
 
 export default function Home() {
@@ -117,11 +116,6 @@ export default function Home() {
               }`}
             >
               {a.rotulo}
-              {a.chave === "emails" && (data?.kpis.emailsFalhados ?? 0) > 0 && (
-                <span className="ml-1.5 rounded-full bg-rose-500/20 px-1.5 py-0.5 text-[11px] font-semibold text-rose-300">
-                  {data!.kpis.emailsFalhados}
-                </span>
-              )}
             </button>
           ))}
         </div>
@@ -311,18 +305,6 @@ export default function Home() {
         </>
       )}
 
-      {data && aba === "emails" && (
-        <>
-          <Secao
-            titulo="E-mails do evento não enviados"
-            subtitulo="Falha de envio (Gmail SMTP) — o card segue o funil normal, só o e-mail pro lead que não sai. Incidente 29/07/2026, credencial GMAIL_SDR1_APP_PASSWORD (Vercel do branddi-report-engine)."
-          >
-            <EmailsFalhados dados={data.emailsFalhados} />
-          </Secao>
-
-          <Rodape />
-        </>
-      )}
     </main>
   );
 }
