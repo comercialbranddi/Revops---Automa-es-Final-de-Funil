@@ -56,18 +56,6 @@ export type ErroItem = {
   link: string;
 };
 
-/** Card em que o e-mail final (relatório ou Envio 1) falhou por SMTP/credencial. */
-export type EmailFalhaItem = {
-  id: number;
-  org: string;
-  emailLead: string | null;
-  estagio: string;
-  status: "open" | "won" | "lost";
-  mensagem: string;
-  ocorreuEm: string;
-  link: string;
-};
-
 export type Contagem = { chave: string; rotulo: string; n: number; severidade?: Severidade };
 
 export type EtapaFunil = {
@@ -172,12 +160,6 @@ export type ResultadoEvento = {
   reunioesPerdidasEstimadas: number;
 };
 
-export type EntradaSorteio = {
-  nome: string;
-  entradas: number;
-  fontes: string[];
-};
-
 export type EventosData = {
   atualizadoEm: string;
   periodoDias: number;
@@ -199,7 +181,6 @@ export type EventosData = {
     errosAbertos: number;
     errosResolvidos24h: number;
     medianaMinutosAteRelatorio: number | null;
-    emailsFalhados: number;
   };
   alertas: Alerta[];
   funil: EtapaFunil[];
@@ -212,13 +193,6 @@ export type EventosData = {
   reprovadosPorMotivo: Contagem[];
   clientes: CardResumo[];
   relatorios: CardResumo[];
-  emailsFalhados: {
-    itens: EmailFalhaItem[];
-    /** quantos cards do período foram checados nas notas — a busca é limitada por custo. */
-    checados: number;
-    /** total de cards do período que ENTRARIAM na checagem — se > checados, a lista está truncada. */
-    elegiveis: number;
-  };
   erros: {
     abertos: ErroItem[];
     resolvidos: ErroItem[];
@@ -240,12 +214,5 @@ export type EventosData = {
   };
   equipe: Participante[];
   resultado: ResultadoEvento;
-  sorteio: {
-    disponivel: boolean;
-    total: number;
-    participantes: number;
-    porFonte: Contagem[];
-    entradas: EntradaSorteio[];
-  };
   legado: { abertos: number; perdidos: number };
 };

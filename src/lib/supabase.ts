@@ -100,14 +100,6 @@ export type PlacarPonto = {
   created_at: string;
 };
 
-export type SorteioEntry = {
-  person_name: string;
-  email: string | null;
-  source: string;
-  deal_id: number | null;
-  created_at: string;
-};
-
 export type ReportDispatch = { deal_id: number; dispatched_at: string };
 
 export function fetchDealLogs(dealIds: number[]) {
@@ -141,8 +133,3 @@ export function fetchPlacar() {
   );
 }
 
-export function fetchSorteio() {
-  return select<SorteioEntry>(
-    "evento_sorteio_entries?select=person_name,email,source,deal_id,created_at&order=created_at.desc&limit=2000"
-  );
-}

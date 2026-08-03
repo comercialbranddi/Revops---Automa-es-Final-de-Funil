@@ -317,44 +317,6 @@ export function inicioDoDiaBrt(agora = new Date()): number {
   return agora.getTime() - decorridoMs;
 }
 
-/**
- * Falha de ENVIO (SMTP/Gmail) — diferente das REGRAS acima, que classificam o
- * DESFECHO do card (por que parou). Aqui a pergunta é ortogonal: o card pode
- * ter completado o funil certinho (relatório gerado, Prospecção Ativa) e
- * mesmo assim o e-mail final não ter saído — por isso essa checagem roda à
- * parte, sobre TODAS as notas do card, não só a mais recente.
- *
- * Padrões achados ao vivo em 29/07/2026 (incidente de credencial Gmail
- * expirada, GMAIL_SDR1_APP_PASSWORD no Vercel do branddi-report-engine):
- *   - "❌ Falha ao enviar e-mail do evento (modelo: X): Invalid login: ..."
- *   - "Envio 1 NÃO enviado — ativação da monitoria — Invalid login: ..."
- * Mantido genérico (Invalid login / BadCredentials / "Falha ao enviar e-mail
- * do evento") pra continuar pegando se a mensagem exata mudar de novo.
- */
-const RE_FALHA_EMAIL =
-  /(Falha ao enviar e-mail do evento[^:]*:\s*(.+))|(Envio 1 NÃO enviado[^\n<]*)|(Invalid login[^\n<]*)|(BadCredentials)/i;
-
-export type FalhaEmail = { mensagem: string; ocorreuEm: string };
-
-/**
- * Varre as notas (mais recente primeiro) e devolve a ÚLTIMA falha de envio
- * registrada — se o reenvio manual já funcionou depois, uma nota de sucesso
- * mais recente não é capturada aqui (essa função só olha pra falha, quem
- * consome decide se ainda é relevante pelo `ocorreuEm`).
- */
-export function detectarFalhaEmail(
-  notas: { content: string; addTime: string }[]
-): FalhaEmail | null {
-  for (let i = notas.length - 1; i >= 0; i--) {
-    const texto = notas[i].content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    const m = texto.match(RE_FALHA_EMAIL);
-    if (m) {
-      return { mensagem: encurtar(m[0], 200), ocorreuEm: notas[i].addTime };
-    }
-  }
-  return null;
-}
-
 /** Corte de período: 1 = desde 00:00 BRT de hoje; N>1 = últimos N dias; 0 = tudo. */
 export function corteDoPeriodo(dias: number, agora = new Date()): number {
   if (!dias || dias <= 0) return 0;

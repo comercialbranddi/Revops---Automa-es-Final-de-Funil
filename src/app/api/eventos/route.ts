@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import {
   fetchEventoDeals,
   fetchDealNotes,
-  fetchDealNotesComData,
   fetchStageNames,
   pipedriveCardUrl,
   ETAPAS_DE_PARADA,
@@ -19,23 +18,18 @@ import {
   fetchAutomationErrors,
   fetchReportDispatches,
   fetchPlacar,
-  fetchSorteio,
   type AutomationError,
   type DealProcessingLog,
   type PlacarPonto,
-  type SorteioEntry,
 } from "@/lib/supabase";
 import {
   fetchPlacarPublico,
-  fetchSorteioPublico,
   type PlacarPublico,
-  type SorteioPublico,
 } from "@/lib/evento-publico";
 import { montarResultado } from "@/lib/resultado";
 import {
   classificarPorNotas,
   corteDoPeriodo,
-  detectarFalhaEmail,
   estaTravado,
   minutosDesde,
   motivoDoCard,
@@ -47,7 +41,6 @@ import type {
   CardAoVivo,
   CardResumo,
   Contagem,
-  EmailFalhaItem,
   ErroItem,
   EtapaFunil,
   EventosData,
@@ -76,15 +69,6 @@ const ETAPAS_FINAIS_OK = [
 const MAX_NOTAS_COM_LOG = 15;
 const MAX_NOTAS_SEM_LOG = 60;
 const NOTAS_POR_LOTE = 8;
-
-/**
- * Incidente 29/07/2026 (Gmail SMTP, GMAIL_SDR1_APP_PASSWORD expirada): card
- * pode ter completado o funil certinho e mesmo assim o e-mail final não ter
- * saído — não dá pra saber isso pelo log/lost_reason, só lendo as notas. Custa
- * 1 request por card checado; capado pros mais recentes do período pra não
- * estourar o rate limit do Pipedrive em dia de pico.
- */
-const MAX_EMAIL_FALHA_CHECADOS = 150;
 
 function nomeOrg(d: EventoDeal): string {
   return d.orgName || d.title || `#${d.id}`;
@@ -123,14 +107,12 @@ export async function GET(request: Request) {
   const corte = corteDoPeriodo(periodoDias, agora);
 
   try {
-    // Placar e sorteio vêm da Edge Function pública (mesma fonte do
-    // formoff/placar.html) — não dependem de credencial. Se ela cair, o resto
-    // do painel continua de pé.
-    const [todos, nomesEtapa, placarPub, sorteioPub] = await Promise.all([
+    // O placar vem da Edge Function pública (mesma fonte do formoff/placar.html)
+    // — não depende de credencial. Se ela cair, o resto do painel continua de pé.
+    const [todos, nomesEtapa, placarPub] = await Promise.all([
       fetchEventoDeals(),
       fetchStageNames(),
       fetchPlacarPublico().catch(() => null as PlacarPublico | null),
-      fetchSorteioPublico().catch(() => null as SorteioPublico | null),
     ]);
     const nomeEtapa = (id: number) => nomesEtapa[id] || STAGE_NAMES[id] || String(id);
 
@@ -146,7 +128,6 @@ export async function GET(request: Request) {
     let erros: AutomationError[] = [];
     let dispatches: { deal_id: number; dispatched_at: string }[] = [];
     let placarRows: PlacarPonto[] = [];
-    let sorteioRows: SorteioEntry[] = [];
     let supabaseErro: string | null = null;
     const temSupabase = supabaseConfigurado();
 
@@ -156,12 +137,11 @@ export async function GET(request: Request) {
         "lista vazia (sem erro) pra chave anon/publishable — troque por SUPABASE_SERVICE_ROLE_KEY.";
     } else if (temSupabase && ids.length) {
       try {
-        [logs, erros, dispatches, placarRows, sorteioRows] = await Promise.all([
+        [logs, erros, dispatches, placarRows] = await Promise.all([
           fetchDealLogs(ids),
           fetchAutomationErrors(ids),
           fetchReportDispatches(ids),
           fetchPlacar(),
-          fetchSorteio(),
         ]);
       } catch (err) {
         supabaseErro = err instanceof Error ? err.message : "falha ao ler o Supabase";
@@ -327,36 +307,6 @@ export async function GET(request: Request) {
       .sort((a, b) => (a.addTime < b.addTime ? 1 : -1))
       .map(resumo);
 
-    // ── E-mails não enviados (falha de SMTP/credencial) ────────────────
-    // Ortogonal ao `motivo` do card — roda sobre TODAS as notas, não só a mais
-    // recente, porque o card pode ter completado o funil (relatório gerado)
-    // e mesmo assim o e-mail final não ter saído.
-    const elegiveisEmail = deals
-      .slice()
-      .sort((a, b) => (a.addTime < b.addTime ? 1 : -1))
-      .slice(0, MAX_EMAIL_FALHA_CHECADOS);
-    const emailsFalhadosItens: EmailFalhaItem[] = [];
-    for (let i = 0; i < elegiveisEmail.length; i += NOTAS_POR_LOTE) {
-      await Promise.all(
-        elegiveisEmail.slice(i, i + NOTAS_POR_LOTE).map(async (d) => {
-          const falha = detectarFalhaEmail(await fetchDealNotesComData(d.id));
-          if (falha) {
-            emailsFalhadosItens.push({
-              id: d.id,
-              org: nomeOrg(d),
-              emailLead: d.personEmail,
-              estagio: nomeEtapa(d.stageId),
-              status: d.status,
-              mensagem: falha.mensagem,
-              ocorreuEm: falha.ocorreuEm,
-              link: pipedriveCardUrl(d.id),
-            });
-          }
-        })
-      );
-    }
-    emailsFalhadosItens.sort((a, b) => (a.ocorreuEm < b.ocorreuEm ? 1 : -1));
-
     // ── Fechamento do evento ───────────────────────────────────────────
     // Roda sobre a coorte INTEIRA, não sobre o período selecionado. Reaproveita
     // a classificação já feita e, pros cards de fora do período, cai na
@@ -515,12 +465,6 @@ export async function GET(request: Request) {
       }))
       .sort((a, b) => (b.pontos ?? 0) - (a.pontos ?? 0) || b.total - a.total);
 
-    const entradasSorteio = (sorteioPub?.porPessoa || []).map((p) => ({
-      nome: p.nome,
-      entradas: p.entradas,
-      fontes: Object.keys(p.fontes),
-    }));
-
     // ── KPIs ───────────────────────────────────────────────────────────
     const abertos = deals.filter((d) => d.status === "open");
     const travados = deals.filter((d) => estaTravado(d, agora.getTime()));
@@ -551,7 +495,6 @@ export async function GET(request: Request) {
       errosAbertos: errosAbertos.length,
       errosResolvidos24h,
       medianaMinutosAteRelatorio: mediana(tempoAteRelatorio),
-      emailsFalhados: emailsFalhadosItens.length,
     };
 
     // ── Alertas (o que precisa de atenção) ─────────────────────────────
@@ -565,18 +508,6 @@ export async function GET(request: Request) {
         texto:
           `Cards abertos em Novo Lead ou Monitoria além do SLA (${SLA_MONITORIA_MIN}min em Monitoria). ` +
           "O sweep da Lia re-dispara sozinho — se o número não cair, a fila do SerpMonitor está represada.",
-      });
-    }
-
-    if (kpis.emailsFalhados > 0) {
-      alertas.push({
-        nivel: "critico",
-        titulo: "E-mails do evento não enviados (Gmail SMTP)",
-        valor: String(kpis.emailsFalhados),
-        texto:
-          `${kpis.emailsFalhados} card(s) com falha ao enviar e-mail (relatório ou Envio 1) — ` +
-          `credencial GMAIL_SDR1_APP_PASSWORD do branddi-report-engine (Vercel). O card segue o funil ` +
-          "normalmente, só o e-mail pro lead que não sai — então nenhuma outra seção do painel acusa isso.",
       });
     }
 
@@ -658,7 +589,7 @@ export async function GET(request: Request) {
         valor: null,
         texto:
           "Sem SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY o painel só enxerga o Pipedrive: " +
-          "fluxo ao vivo, erros abertos/resolvidos, placar e sorteio ficam vazios.",
+          "fluxo ao vivo e erros abertos/resolvidos ficam vazios.",
       });
     } else if (supabaseErro) {
       alertas.push({
@@ -685,11 +616,6 @@ export async function GET(request: Request) {
       reprovadosPorMotivo,
       clientes,
       relatorios,
-      emailsFalhados: {
-        itens: emailsFalhadosItens,
-        checados: elegiveisEmail.length,
-        elegiveis: deals.length,
-      },
       erros: {
         abertos: errosAbertos,
         resolvidos: errosResolvidos.slice(0, 80),
@@ -704,20 +630,6 @@ export async function GET(request: Request) {
       },
       equipe,
       resultado,
-      sorteio: {
-        disponivel: Boolean(sorteioPub),
-        total: sorteioPub?.totalEntradas ?? 0,
-        participantes: sorteioPub?.totalParticipantes ?? 0,
-        porFonte: contar(
-          entradasSorteio.flatMap((e) =>
-            e.fontes.map((f) => ({
-              chave: f,
-              rotulo: f === "pre_cadastro" ? "Pré-cadastro (LP)" : f,
-            }))
-          )
-        ),
-        entradas: entradasSorteio,
-      },
       legado: {
         abertos: legado.filter((d) => d.status === "open").length,
         perdidos: legado.filter((d) => d.status === "lost").length,

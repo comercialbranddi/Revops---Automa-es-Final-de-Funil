@@ -339,23 +339,3 @@ export async function fetchDealNotes(dealId: number): Promise<string[]> {
   }
 }
 
-/**
- * Mesma fonte de `fetchDealNotes`, mas com `add_time` — usado só pela detecção
- * de falha de envio de e-mail (precisa saber QUANDO a falha aconteceu, não só
- * se aconteceu).
- */
-export async function fetchDealNotesComData(
-  dealId: number
-): Promise<{ content: string; addTime: string }[]> {
-  try {
-    const json = await getJson(
-      `${PIPEDRIVE_V1}/notes?deal_id=${dealId}&limit=50&api_token=${token()}`
-    );
-    return (json.data || []).map((n: { content: string; add_time: string }) => ({
-      content: n.content,
-      addTime: toIso(n.add_time) || n.add_time,
-    }));
-  } catch {
-    return [];
-  }
-}

@@ -14,7 +14,7 @@ import {
   Perdas,
   ResumoExecutivo,
 } from "@/components/resultado";
-import { Participantes, Sorteio } from "@/components/equipe";
+import { Participantes } from "@/components/equipe";
 
 const PERIODOS = [
   { dias: 1, rotulo: "Hoje" },
@@ -25,12 +25,12 @@ const PERIODOS = [
 
 const INTERVALO_MS = 60_000;
 
-type Aba = "resultado" | "funil" | "sorteio";
+type Aba = "resultado" | "funil" | "equipe";
 
 const ABAS: { chave: Aba; rotulo: string }[] = [
   { chave: "resultado", rotulo: "Resultado do evento" },
   { chave: "funil", rotulo: "Funil e erros" },
-  { chave: "sorteio", rotulo: "Sorteio e equipe" },
+  { chave: "equipe", rotulo: "Equipe e placar" },
 ];
 
 export default function Home() {
@@ -343,15 +343,8 @@ export default function Home() {
         </>
       )}
 
-      {data && aba === "sorteio" && (
+      {data && aba === "equipe" && (
         <>
-          <Secao
-            titulo="Sorteio do iPhone"
-            subtitulo="Quem está concorrendo — a lista nominal que serve pra sortear."
-          >
-            <Sorteio sorteio={data.sorteio} />
-          </Secao>
-
           <Secao
             titulo="Cada participante do time"
             subtitulo="Quantos leads cada pessoa trouxe, por canal, e no que eles viraram."
@@ -379,9 +372,8 @@ function Rodape() {
     <footer className="mt-16 border-t border-slate-800 pt-6 text-xs leading-relaxed text-slate-600">
       Fontes: Pipedrive (pipeline 25, abertos via v1 e perdidos/ganhos via v2) e Supabase da Lia
       (<code>deal_processing_logs</code>, <code>automation_errors</code>,{" "}
-      <code>event_report_dispatches</code>, <code>evento_placar_pontos</code>,{" "}
-      <code>evento_sorteio_entries</code>). Atualiza sozinho a cada 60s. Só o pipeline de Eventos —
-      nenhum dado de outros funis entra aqui.
+      <code>event_report_dispatches</code>, <code>evento_placar_pontos</code>). Atualiza sozinho a cada
+      60s. Só o pipeline de Eventos — nenhum dado de outros funis entra aqui.
     </footer>
   );
 }
