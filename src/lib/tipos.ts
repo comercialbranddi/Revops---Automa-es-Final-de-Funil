@@ -98,6 +98,80 @@ export type Participante = {
   pontos: number | null;
 };
 
+// ─── Fechamento do evento (visão de liderança) ────────────────────────
+// Calculado sobre a coorte inteira do evento, de propósito ignorando o
+// filtro de período do topo: o número que a liderança discute é o do evento
+// fechado, não o dos últimos 7 dias.
+
+export type LinhaFunilResultado = {
+  rotulo: string;
+  n: number;
+  pctDoTotal: number;
+  /** Conversão em relação à etapa anterior do funil. */
+  pctDaAnterior: number | null;
+  tom: "ok" | "atencao" | "critico" | "neutro";
+};
+
+export type CanalResultado = {
+  canal: string;
+  leads: number;
+  reunioes: number;
+  taxaReuniao: number;
+  emailPessoal: number;
+  taxaEmailPessoal: number;
+  relatorios: number;
+};
+
+export type PerdaResultado = {
+  rotulo: string;
+  n: number;
+  pct: number;
+  evitavel: boolean;
+  explicacao: string;
+};
+
+export type PessoaResultado = {
+  pessoa: string;
+  estandeLeads: number;
+  estandeReunioes: number;
+  lpLeads: number;
+  lpReunioes: number;
+  total: number;
+  reunioes: number;
+  taxa: number;
+};
+
+export type DiaResultado = { dia: string; leads: number; reunioes: number };
+
+export type Leitura = {
+  tom: "ok" | "atencao" | "critico" | "info";
+  titulo: string;
+  texto: string;
+};
+
+export type ResultadoEvento = {
+  janelaDe: string;
+  janelaAte: string;
+  totais: {
+    leads: number;
+    empresas: number;
+    reunioes: number;
+    relatorios: number;
+    contratos: number;
+    taxaReuniao: number;
+    emailPessoal: number;
+    taxaEmailPessoal: number;
+  };
+  funil: LinhaFunilResultado[];
+  canais: CanalResultado[];
+  perdas: PerdaResultado[];
+  equipe: PessoaResultado[];
+  linhaDoTempo: DiaResultado[];
+  leituras: Leitura[];
+  /** Reuniões que os leads barrados por e-mail pessoal renderiam na taxa do próprio canal. */
+  reunioesPerdidasEstimadas: number;
+};
+
 export type EntradaSorteio = {
   nome: string;
   entradas: number;
@@ -165,6 +239,7 @@ export type EventosData = {
     }[];
   };
   equipe: Participante[];
+  resultado: ResultadoEvento;
   sorteio: {
     disponivel: boolean;
     total: number;

@@ -5,6 +5,15 @@ import type { EventosData } from "@/lib/tipos";
 import { Kpi, Secao, fmtData, fmtDuracao } from "@/components/ui";
 import { Alertas, AoVivo, Funil, MovimentoPorHora, Novos } from "@/components/fluxo";
 import { Clientes, Erros, Placar, Relatorios, Reprovados } from "@/components/erros";
+import {
+  Canais,
+  EquipeResultado,
+  FunilResultado,
+  Leituras,
+  LinhaDoTempo,
+  Perdas,
+  ResumoExecutivo,
+} from "@/components/resultado";
 import { Participantes, Sorteio } from "@/components/equipe";
 
 const PERIODOS = [
@@ -16,9 +25,10 @@ const PERIODOS = [
 
 const INTERVALO_MS = 60_000;
 
-type Aba = "funil" | "sorteio";
+type Aba = "resultado" | "funil" | "sorteio";
 
 const ABAS: { chave: Aba; rotulo: string }[] = [
+  { chave: "resultado", rotulo: "Resultado do evento" },
   { chave: "funil", rotulo: "Funil e erros" },
   { chave: "sorteio", rotulo: "Sorteio e equipe" },
 ];
@@ -28,7 +38,7 @@ export default function Home() {
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [dias, setDias] = useState(7);
-  const [aba, setAba] = useState<Aba>("funil");
+  const [aba, setAba] = useState<Aba>("resultado");
   const [novosDesdeUltima, setNovosDesdeUltima] = useState(0);
   const totalAnterior = useRef<number | null>(null);
 
@@ -143,6 +153,61 @@ export default function Home() {
         <div className="mt-6 rounded-xl border border-rose-900 bg-rose-950/40 p-4 text-rose-300">
           Erro ao carregar: {erro}
         </div>
+      )}
+
+      {data && aba === "resultado" && (
+        <>
+          <Secao
+            titulo="Resultado do evento"
+            subtitulo="O fechamento, ponta a ponta. Números do evento inteiro — não mudam com o filtro de período."
+          >
+            <ResumoExecutivo r={data.resultado} />
+          </Secao>
+
+          <Secao
+            titulo="A leitura"
+            subtitulo="O que os números dizem, e o que fazer diferente no próximo evento."
+          >
+            <Leituras r={data.resultado} />
+          </Secao>
+
+          <Secao
+            titulo="Do lead ao contrato"
+            subtitulo="Quanto sobra em cada etapa, em número absoluto e em conversão da etapa anterior."
+          >
+            <FunilResultado r={data.resultado} />
+          </Secao>
+
+          <Secao
+            titulo="Estande x landing page"
+            subtitulo="O corte que mais explica o resultado — os dois canais jogam jogos diferentes."
+          >
+            <Canais r={data.resultado} />
+          </Secao>
+
+          <Secao
+            titulo="Onde o funil perdeu gente"
+            subtitulo="Separando o que era descarte legítimo do que era perda evitável."
+          >
+            <Perdas r={data.resultado} />
+          </Secao>
+
+          <Secao
+            titulo="Desempenho por pessoa"
+            subtitulo="Volume e conversão, sempre com o canal ao lado — sem isso a comparação é injusta."
+          >
+            <EquipeResultado r={data.resultado} />
+          </Secao>
+
+          <Secao
+            titulo="Dia a dia do evento"
+            subtitulo="Quando os leads entraram e quando viraram reunião."
+          >
+            <LinhaDoTempo r={data.resultado} />
+          </Secao>
+
+          <Rodape />
+        </>
       )}
 
       {data && aba === "funil" && (

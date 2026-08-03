@@ -31,6 +31,7 @@ import {
   type PlacarPublico,
   type SorteioPublico,
 } from "@/lib/evento-publico";
+import { montarResultado } from "@/lib/resultado";
 import {
   classificarPorNotas,
   corteDoPeriodo,
@@ -355,6 +356,19 @@ export async function GET(request: Request) {
       );
     }
     emailsFalhadosItens.sort((a, b) => (a.ocorreuEm < b.ocorreuEm ? 1 : -1));
+
+    // ── Fechamento do evento ───────────────────────────────────────────
+    // Roda sobre a coorte INTEIRA, não sobre o período selecionado. Reaproveita
+    // a classificação já feita e, pros cards de fora do período, cai na
+    // classificação por etapa/lost_reason — que é justamente a que identifica
+    // e-mail pessoal e cliente ativo, os dois baldes que a leitura usa.
+    const temRelatorio = (d: EventoDeal) => Boolean(d.relatorioHtml) || dispatchPorDeal.has(d.id);
+    const motivosCoorte = new Map<number, string>();
+    for (const d of todos) {
+      const ja = motivos.get(d.id);
+      motivosCoorte.set(d.id, (ja ?? motivoDoCard(d, logPorDeal.get(d.id))).chave);
+    }
+    const resultado = montarResultado(todos, motivosCoorte, temRelatorio);
 
     // ── Erros técnicos ─────────────────────────────────────────────────
     const orgPorDeal = new Map(deals.map((d) => [d.id, nomeOrg(d)]));
@@ -689,6 +703,7 @@ export async function GET(request: Request) {
         ranking,
       },
       equipe,
+      resultado,
       sorteio: {
         disponivel: Boolean(sorteioPub),
         total: sorteioPub?.totalEntradas ?? 0,
